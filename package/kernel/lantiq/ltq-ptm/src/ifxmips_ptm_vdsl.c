@@ -278,7 +278,6 @@ static int ptm_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
     ASSERT(dev == g_net_dev[0], "incorrect device");
 
     if ( !g_showtime ) {
-        err("not in showtime");
         goto PTM_HARD_START_XMIT_FAIL;
     }
 
