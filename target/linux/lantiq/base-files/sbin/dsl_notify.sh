@@ -18,44 +18,74 @@ scan_interfaces
 
 local default
 config_load system
-config_get default led_adsl default
+config_get default led_dsl default
 if [ "$default" != 1 ]; then
-	case "$DSL_INTERFACE_STATUS" in
-	  "HANDSHAKE")  led_timer adsl 500 500;;
-	  "TRAINING")   led_timer adsl 200 200;;
-	  "UP")		led_on adsl;;
-	  *)		led_off adsl
-	esac
+  case "$DSL_INTERFACE_STATUS" in
+    "HANDSHAKE")  led_timer dsl 500 500;;
+    "TRAINING")   led_timer dsl 200 200;;
+    "UP")   led_on dsl;;
+    *)    led_off dsl
+  esac
 fi
 
 local interfaces=`ubus list network.interface.\* | cut -d"." -f3`
 local ifc
 for ifc in $interfaces; do
 
-	local up
-	json_load "$(ifstatus $ifc)"
-	json_get_var up up
+  local up
+  json_load "$(ifstatus $ifc)"
+  json_get_var up up
 
-	local auto
-	config_get_bool auto "$ifc" auto 1
+  local auto
+        config_get_bool auto "$ifc" auto 1
 
-	local proto
-	json_get_var proto proto
+  local autostart
+  config_get_bool autostart "$ifc" autostart 1
+  [ "$autostart" = 1 ] || continue
 
-	if [ "$DSL_INTERFACE_STATUS" = "UP" ]; then
-		if [ "$proto" = "pppoa" ] && [ "$up" != 1 ] && [ "$auto" = 1 ]; then
-			( sleep 1; ifup "$ifc" ) &
-		fi
-	else
-		if [ "$proto" = "pppoa" ] && [ "$up" = 1 ] && [ "$auto" = 1 ]; then
-			( sleep 1; ifdown "$ifc" ) &
-		else
-			json_get_var autostart autostart
-			if [ "$proto" = "pppoa" ] && [ "$up" != 1 ] && [ "$autostart" = 1 ]; then
-				( sleep 1; ifdown "$ifc" ) &
-			fi
-		fi
-	fi
+  local proto
+  json_get_var proto proto
+
+  local is_dsl_device=no
+  case "$proto" in
+    pppoe ) : ;; # ok
+    pppoa ) is_dsl_device=yes ;; # ok
+    * ) continue ;;
+  esac
+
+  if [ "$is_dsl_device" = no ]; then
+    local ifnames
+    ifnames="$(uci get network."$ifc".ifnames 2> /dev/null)"
+    [ -z "$ifnames" ] && ifnames="$(uci get network."$ifc".ifname 2> /dev/null)"
+    [ -z "$ifnames" ] && continue
+
+    local ifname
+    for ifname in $ifnames; do
+      case "$ifname" in
+        nas[0-9]* | ptm[0-9]* )
+          is_dsl_device=yes
+          break
+          ;;
+      esac
+    done
+  fi
+  [ "$is_dsl_device" = yes ] || continue
+
+  if [ "$DSL_INTERFACE_STATUS" = "UP" ]; then
+    if [ "$up" != 1 ] && [ "$auto" = 1 ]; then
+      logger -t "${0##*/}[$$]" -p daemon.notice "DSL line up --> ifup $ifc"
+      ( sleep 1; ifup "$ifc" ) &
+    fi
+  else
+    if [ "$up" = 1 ] && [ "$auto" = 1 ]; then
+      logger -t "${0##*/}[$$]" -p daemon.notice "DSL line down --> ifdown $ifc"
+      ( sleep 1; ifdown "$ifc" ) &
+    else
+      if [ "$up" != 1 ] && [ "$autostart" = 1 ]; then
+        #logger -t "${0##*/}[$$]" -p daemon.notice "DSL line down --> ifdown $ifc"
+        ( sleep 1; ifdown "$ifc" ) &
+      fi
+    fi
+  fi
+
 done
-
-
