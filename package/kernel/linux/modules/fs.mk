@@ -188,6 +188,26 @@ endef
 $(eval $(call KernelPackage,fuse))
 
 
+define KernelPackage/fs-f2fs
+  SUBMENU:=$(FS_MENU)
+  TITLE:=F2FS filesystem support
+  DEPENDS:= @!LINUX_3_3 @!LINUX_3_6
+  KCONFIG:= \
+    CONFIG_F2FS_FS \
+    CONFIG_F2FS_STAT_FS=n \
+    CONFIG_F2FS_FS_XATTR=n \
+    CONFIG_F2FS_FS_POSIX_ACL=n
+  FILES:= $(LINUX_DIR)/fs/f2fs/f2fs.ko
+  AUTOLOAD:=$(call AutoLoad,30,f2fs)
+endef
+
+define KernelPackage/fs-f2fs/description
+ Kernel module for F2FS filesystem support
+endef
+
+$(eval $(call KernelPackage,fs-f2fs))
+
+
 define KernelPackage/fs-hfs
   SUBMENU:=$(FS_MENU)
   TITLE:=HFS filesystem support
