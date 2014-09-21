@@ -1,0 +1,154 @@
+--- a/fs/f2fs/file.c	2014-09-22 00:50:19.000000000 +0200
++++ b/fs/f2fs/file.c	2014-09-22 13:19:04.227978929 +0200
+@@ -532,6 +532,9 @@
+ 	for (index = pg_start; index <= pg_end; index++) {
+ 		struct dnode_of_data dn;
+ 
++		if (index == pg_end && !off_end)
++			goto noalloc;
++
+ 		f2fs_lock_op(sbi);
+ 		set_new_dnode(&dn, inode, NULL, NULL, 0);
+ 		ret = f2fs_reserve_block(&dn, index);
+@@ -539,6 +542,7 @@
+ 		if (ret)
+ 			break;
+ 
++noalloc:
+ 		if (pg_start == pg_end)
+ 			new_size = offset + len;
+ 		else if (index == pg_start && off_start)
+diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
+index e51c732..7ef7acd 100644
+--- a/fs/f2fs/f2fs.h
++++ b/fs/f2fs/f2fs.h
+@@ -342,9 +342,6 @@ struct f2fs_sm_info {
+ 	struct dirty_seglist_info *dirty_info;	/* dirty segment information */
+ 	struct curseg_info *curseg_array;	/* active segment information */
+ 
+-	struct list_head wblist_head;	/* list of under-writeback pages */
+-	spinlock_t wblist_lock;		/* lock for checkpoint */
+-
+ 	block_t seg0_blkaddr;		/* block address of 0'th segment */
+ 	block_t main_blkaddr;		/* start block address of main area */
+ 	block_t ssa_blkaddr;		/* start block address of SSA area */
+diff --git a/fs/f2fs/segment.c b/fs/f2fs/segment.c
+index f25f0e0..b22d5a0 100644
+--- a/fs/f2fs/segment.c
++++ b/fs/f2fs/segment.c
+@@ -1885,8 +1885,6 @@ int build_segment_manager(struct f2fs_sb_info *sbi)
+ 
+ 	/* init sm info */
+ 	sbi->sm_info = sm_info;
+-	INIT_LIST_HEAD(&sm_info->wblist_head);
+-	spin_lock_init(&sm_info->wblist_lock);
+ 	sm_info->seg0_blkaddr = le32_to_cpu(raw_super->segment0_blkaddr);
+ 	sm_info->main_blkaddr = le32_to_cpu(raw_super->main_blkaddr);
+ 	sm_info->segment_count = le32_to_cpu(raw_super->segment_count);
+diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
+index 7ef7acd..58df97e 100644
+--- a/fs/f2fs/f2fs.h
++++ b/fs/f2fs/f2fs.h
+@@ -641,7 +641,8 @@ static inline void f2fs_unlock_all(struct f2fs_sb_info *sbi)
+  */
+ static inline int check_nid_range(struct f2fs_sb_info *sbi, nid_t nid)
+ {
+-	WARN_ON((nid >= NM_I(sbi)->max_nid));
++	if (unlikely(nid < F2FS_ROOT_INO(sbi)))
++		return -EINVAL;
+ 	if (unlikely(nid >= NM_I(sbi)->max_nid))
+ 		return -EINVAL;
+ 	return 0;
+diff --git a/fs/f2fs/inode.c b/fs/f2fs/inode.c
+index adc622c..2cf6962 100644
+--- a/fs/f2fs/inode.c
++++ b/fs/f2fs/inode.c
+@@ -78,6 +78,7 @@ static int do_read_inode(struct inode *inode)
+ 	if (check_nid_range(sbi, inode->i_ino)) {
+ 		f2fs_msg(inode->i_sb, KERN_ERR, "bad inode number: %lu",
+ 			 (unsigned long) inode->i_ino);
++		WARN_ON(1);
+ 		return -EINVAL;
+ 	}
+ 
+diff --git a/fs/f2fs/super.c b/fs/f2fs/super.c
+index b2b1863..8f96d93 100644
+--- a/fs/f2fs/super.c
++++ b/fs/f2fs/super.c
+@@ -689,9 +689,7 @@ static struct inode *f2fs_nfs_get_inode(struct super_block *sb,
+ 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
+ 	struct inode *inode;
+ 
+-	if (unlikely(ino < F2FS_ROOT_INO(sbi)))
+-		return ERR_PTR(-ESTALE);
+-	if (unlikely(ino >= NM_I(sbi)->max_nid))
++	if (check_nid_range(sbi, ino))
+ 		return ERR_PTR(-ESTALE);
+ 
+ 	/*
+diff --git a/fs/f2fs/dir.c b/fs/f2fs/dir.c
+index 966acb0..a4addd7 100644
+--- a/fs/f2fs/dir.c
++++ b/fs/f2fs/dir.c
+@@ -376,11 +376,11 @@ static struct page *init_inode_metadata(struct inode *inode,
+ 
+ put_error:
+ 	f2fs_put_page(page, 1);
++error:
+ 	/* once the failed inode becomes a bad inode, i_mode is S_IFREG */
+ 	truncate_inode_pages(&inode->i_data, 0);
+ 	truncate_blocks(inode, 0);
+ 	remove_dirty_dir_inode(inode);
+-error:
+ 	remove_inode_page(inode);
+ 	return ERR_PTR(err);
+ }
+diff --git a/fs/f2fs/namei.c b/fs/f2fs/namei.c
+index 9138c32..aa3ddb2 100644
+--- a/fs/f2fs/namei.c
++++ b/fs/f2fs/namei.c
+@@ -474,7 +474,8 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 	return 0;
+ 
+ put_out_dir:
+-	f2fs_put_page(new_page, 1);
++	kunmap(new_page);
++	f2fs_put_page(new_page, 0);
+ out_dir:
+ 	if (old_dir_entry) {
+ 		kunmap(old_dir_page);
+diff --git a/fs/f2fs/namei.c b/fs/f2fs/namei.c
+index aa3ddb2..a6bdddc 100644
+--- a/fs/f2fs/namei.c
++++ b/fs/f2fs/namei.c
+@@ -417,9 +417,6 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 		}
+ 
+ 		f2fs_set_link(new_dir, new_entry, new_page, old_inode);
+-		down_write(&F2FS_I(old_inode)->i_sem);
+-		F2FS_I(old_inode)->i_pino = new_dir->i_ino;
+-		up_write(&F2FS_I(old_inode)->i_sem);
+ 
+ 		new_inode->i_ctime = CURRENT_TIME;
+ 		down_write(&F2FS_I(new_inode)->i_sem);
+@@ -448,6 +445,10 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 		}
+ 	}
+ 
++	down_write(&F2FS_I(old_inode)->i_sem);
++	file_lost_pino(old_inode);
++	up_write(&F2FS_I(old_inode)->i_sem);
++
+ 	old_inode->i_ctime = CURRENT_TIME;
+ 	mark_inode_dirty(old_inode);
+ 
+@@ -457,9 +458,6 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
+ 		if (old_dir != new_dir) {
+ 			f2fs_set_link(old_inode, old_dir_entry,
+ 						old_dir_page, new_dir);
+-			down_write(&F2FS_I(old_inode)->i_sem);
+-			F2FS_I(old_inode)->i_pino = new_dir->i_ino;
+-			up_write(&F2FS_I(old_inode)->i_sem);
+ 			update_inode_page(old_inode);
+ 		} else {
+ 			kunmap(old_dir_page);
