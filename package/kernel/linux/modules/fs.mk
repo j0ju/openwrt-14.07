@@ -199,7 +199,7 @@ define KernelPackage/fs-f2fs
     CONFIG_F2FS_FS_POSIX_ACL=n \
     CONFIG_F2FS_CHECK_FS=n
   FILES:= $(LINUX_DIR)/fs/f2fs/f2fs.ko
-  AUTOLOAD:=$(call AutoLoad,30,f2fs)
+  AUTOLOAD:=$(call AutoLoad,30,f2fs,1)
 endef
 
 define KernelPackage/fs-f2fs/description
