@@ -115,6 +115,7 @@ $(curdir)/install: $(TMP_DIR)/.build
 	)
 	@-find $(TARGET_DIR) -name CVS   | $(XARGS) rm -rf
 	@-find $(TARGET_DIR) -name .svn  | $(XARGS) rm -rf
+	@-find $(TARGET_DIR) -name .git  | $(XARGS) rm -rf
 	@-find $(TARGET_DIR) -name '.#*' | $(XARGS) rm -f
 	rm -f $(TARGET_DIR)/usr/lib/opkg/info/*.postinst
 	$(if $(CONFIG_CLEAN_IPKG),rm -rf $(TARGET_DIR)/usr/lib/opkg)
