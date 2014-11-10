@@ -575,3 +575,15 @@ define KernelPackage/crypto-mv-cesa
 endef
 
 $(eval $(call KernelPackage,crypto-mv-cesa))
+
+
+define KernelPackage/crypto-mcespi
+  TITLE:=MIPS IPsec library
+  KCONFIG:=CONFIG_CRYPTO_MCESPI
+  FILES:=$(LINUX_DIR)/crypto/mcespi.ko
+  AUTOLOAD:=$(call AutoLoad,09,mcespi)
+  $(call AddDepends/crypto,+kmod-crypto-manager)
+endef
+
+$(eval $(call KernelPackage,crypto-mcespi))
+
