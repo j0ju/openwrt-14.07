@@ -10,6 +10,13 @@ start_daemon() {
 
 	local cfg="$1"
 
+	local auto
+	config_get auto "$cfg" auto 1
+	case "$auto" in
+		yes | YES | 1 ) : ;;
+		* ) return ;;
+	esac
+
 	local atmdev
 	config_get atmdev "$cfg" atmdev 0
 
