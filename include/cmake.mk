@@ -59,6 +59,7 @@ define Build/Configure/Default
 			-DCMAKE_INSTALL_PREFIX=/usr \
 			-DDL_LIBRARY=$(STAGING_DIR) \
 			-DCMAKE_PREFIX_PATH=$(STAGING_DIR) \
+			-CMAKE_SKIP_RPATH=TRUE  \
 			$(CMAKE_OPTIONS) \
 		$(CMAKE_SOURCE_DIR) \
 	)
