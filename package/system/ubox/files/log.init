@@ -76,6 +76,7 @@ start_service_remote()
 	procd_set_param command "$PROG" -f -h "$(hostname -f)" -r "$log_ip" "${log_port}" -p "$pid_file"
 	[ "${log_proto}" != "udp" ] || procd_append_param command -u
 	[ -z "${log_prefix}" ] || procd_append_param command -P "${log_prefix}"
+	procd_set_param respawn
 	procd_close_instance
 }
 
