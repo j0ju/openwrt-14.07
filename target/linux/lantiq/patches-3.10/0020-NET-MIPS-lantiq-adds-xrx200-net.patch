@@ -683,7 +683,7 @@ Subject: [PATCH 20/34] NET: MIPS: lantiq: adds xrx200-net
 +	len = skb->len < ETH_ZLEN ? ETH_ZLEN : skb->len;
 +
 +	if ((desc->ctl & (LTQ_DMA_OWN | LTQ_DMA_C)) || ch->skb[ch->dma.desc]) {
-+		netdev_err(dev, "tx ring full\n");
++		/* netdev_err(dev, "tx ring full\n"); */
 +		netif_tx_stop_queue(txq);
 +		return NETDEV_TX_BUSY;
 +	}
